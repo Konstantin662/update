@@ -1,0 +1,40 @@
+#include <iostream>
+#include <algorithm>
+#include <thread>
+#include <intrin.h>
+
+// Функция для получения количества тактов процессора с использованием rdtsc и cpuid для синхронизации
+inline uint64_t rdtsc() {
+    uint64_t result;
+    __asm {
+        cpuid; //  Инструкция CPUID для синхронизации и очистки конвейера
+        rdtsc;
+        mov result, rax;
+    }
+    return result;
+}
+
+
+template<typename F>
+long long measure(F&& f) {
+    constexpr int N = 10; // Количество измерений для усреднения
+    long long results[N];
+    for (int i = 0; i < N; ++i) {
+        std::this_thread::yield(); // Уступить планировщику потоков
+
+        uint64_t start_time = rdtsc();
+        f(); // Выполняем измеряемый код
+        uint64_t end_time = rdtsc();
+        results[i] = end_time - start_time;
+    }
+    std::nth_element(results, results + N / 2, results + N); // Находим медиану
+    return results[N / 2];
+}
+
+int main() {
+    auto overhead = measure([]() {}); // Измеряем накладные расходы функции measure
+    auto ticks = measure([]() {
+        delete new int(1); // Пример кода для измерения
+    });
+    std::cout << "Тики, затраченные на удаление целочисленного объекта: " << ticks - overhead << " тактов\n";
+    return 0;
